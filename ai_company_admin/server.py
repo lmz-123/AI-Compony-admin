@@ -366,7 +366,13 @@ def create_agent(payload: dict[str, Any]) -> dict[str, Any]:
     cfg = config_from_payload(payload)
     save_agent_config(name, cfg)
     action = claudeteam_cmd(["hire", name])
-    return {"ok": True, "agent": name, "config": cfg, "action": action}
+    return {
+        "ok": bool(action.get("ok")),
+        "agent": name,
+        "config": cfg,
+        "action": action,
+        "config_saved": True,
+    }
 
 
 def update_agent(agent: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -419,7 +425,7 @@ HTML = r"""<!doctype html>
     main{display:grid;grid-template-columns:280px 1fr 360px;min-height:calc(100vh - 56px)} aside,section{border-right:1px solid var(--line);padding:14px;overflow:auto} section:last-child{border-right:0}
     .toolbar{display:flex;gap:8px;align-items:center}.cards{display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:10px;margin-bottom:12px}.metric{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel)}.metric .label,.muted{color:var(--muted);font-size:12px}.metric .value{font-size:22px;margin-top:4px}
     .agent{display:block;width:100%;text-align:left;margin-bottom:8px}.agent.active{border-color:var(--accent);background:#1b2738}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 7px;font-size:12px;color:var(--muted)}.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
-    pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:12px;min-height:360px;max-height:58vh;overflow:auto} table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--line);padding:7px;text-align:left;vertical-align:top}th{color:var(--muted);font-weight:600}.grid{display:grid;gap:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tabs{display:flex;gap:8px;margin:10px 0}.tabs button.active{border-color:var(--accent)}.hidden{display:none}@media(max-width:1080px){main{grid-template-columns:1fr}aside,section{border-right:0;border-bottom:1px solid var(--line)}}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;background:#0c0e12;border:1px solid var(--line);border-radius:8px;padding:12px;min-height:360px;max-height:58vh;overflow:auto} table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--line);padding:7px;text-align:left;vertical-align:top}th{color:var(--muted);font-weight:600}.grid{display:grid;gap:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tabs{display:flex;gap:8px;margin:10px 0}.tabs button.active{border-color:var(--accent)}.hidden{display:none}.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:50}.modal-backdrop.open{display:flex}.modal{width:min(720px,92vw);max-height:88vh;overflow:auto;background:#171a20;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}@media(max-width:1080px){main{grid-template-columns:1fr}aside,section{border-right:0;border-bottom:1px solid var(--line)}}
   </style>
 </head>
 <body>
@@ -431,24 +437,45 @@ HTML = r"""<!doctype html>
 <pre id="pane"></pre><div id="tasks" class="hidden"></div><div id="inbox" class="hidden"></div><div id="radio" class="hidden"></div><div id="logs" class="hidden"></div></section>
 <section><strong>Agent Editor</strong><div class="grid" style="margin-top:10px"><label>Name<input id="fName"/></label><div class="row"><label>CLI<input id="fCli" placeholder="codex-cli"/></label><label>Model<input id="fModel" placeholder="gpt-5.4-mini"/></label></div><div class="row"><label>Reasoning<input id="fReasoning" placeholder="low / medium / high"/></label><label>Playbook<input id="fPlaybook" placeholder="ops.md"/></label></div><label>Role<textarea id="fRole"></textarea></label><label>Specialty<textarea id="fSpecialty" placeholder="日志分析, Docker Compose"></textarea></label><label>Notes<textarea id="fNotes"></textarea></label><label><input id="fLazy" type="checkbox" style="width:auto"/> Lazy start</label><label><input id="fRestart" type="checkbox" style="width:auto"/> Restart after save</label><div class="toolbar"><button class="primary" onclick="saveAgent()">Save</button><button onclick="loadSelectedIntoForm()">Reset</button></div><div id="formMsg" class="muted"></div></div></section>
 </main>
+<div id="createModal" class="modal-backdrop" onclick="if(event.target===this) closeCreateModal()">
+  <div class="modal">
+    <div class="toolbar" style="justify-content:space-between;margin-bottom:12px"><strong>New Agent</strong><button onclick="closeCreateModal()">Close</button></div>
+    <div class="grid">
+      <label>Name<input id="cName"/></label>
+      <div class="row"><label>CLI<input id="cCli" placeholder="codex-cli"/></label><label>Model<input id="cModel" placeholder="gpt-5.4-mini"/></label></div>
+      <div class="row"><label>Reasoning<input id="cReasoning" placeholder="low / medium / high"/></label><label>Playbook<input id="cPlaybook" placeholder="ops.md"/></label></div>
+      <label>Role<textarea id="cRole"></textarea></label>
+      <label>Specialty<textarea id="cSpecialty" placeholder="日志分析, Docker Compose"></textarea></label>
+      <label>Notes<textarea id="cNotes"></textarea></label>
+      <label><input id="cLazy" type="checkbox" style="width:auto"/> Lazy start</label>
+      <div class="toolbar"><button class="primary" onclick="saveNewAgent()">Create Agent</button><button onclick="resetCreateForm()">Reset</button></div>
+      <div id="createMsg" class="muted"></div>
+    </div>
+  </div>
+</div>
 <script>
-let state=null,selected="",detail=null; const $=id=>document.getElementById(id);
+let state=null,selected="",detail=null,isCreating=false; const $=id=>document.getElementById(id);
 function age(sec){if(sec==null)return"never";if(sec<60)return sec+"s";if(sec<3600)return Math.floor(sec/60)+"m";return Math.floor(sec/3600)+"h"}
 async function api(path,opts){const r=await fetch(path,opts||{cache:"no-store"});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={ok:false,error:t}}if(!r.ok)throw new Error(d.error||r.statusText);return d}
-async function loadAll(){state=await api("/api/admin/state");$("stamp").textContent=new Date(state.generated_at_ms).toLocaleString()+` · ${state.container||"no container"}`;renderCards();renderAgents();if(!selected&&state.agents[0])selected=state.agents[0].agent;if(selected)await loadDetail(selected)}
+async function loadAll(){state=await api("/api/admin/state");$("stamp").textContent=new Date(state.generated_at_ms).toLocaleString()+` · ${state.container||"no container"}`;renderCards();renderAgents();const exists=state.agents.some(a=>a.agent===selected);if(!isCreating&&!selected&&state.agents[0])selected=state.agents[0].agent;if(selected&&!exists&&!isCreating)selected=state.agents[0]?state.agents[0].agent:"";if(selected&&!isCreating)await loadDetail(selected)}
 function renderCards(){const q=state.queue,doctor=state.doctor?`${state.doctor.counts.fail}/${state.doctor.counts.warn}`:"none",learning=state.learning?state.learning.drafts:0;const rows=[["Overall",state.ok?"OK":"Check",state.ok?"good":"bad"],["Doctor",doctor,state.doctor&&state.doctor.counts.fail?"bad":""],["Learning",learning,learning?"warn":""],["Pending",q.pending,""],["Running",q.in_progress,""],["Background",q.background||0,""],["Unread",state.agents.reduce((n,a)=>n+a.unread_count,0),""]];$("cards").innerHTML=rows.map(x=>`<div class="metric"><div class="label">${x[0]}</div><div class="value ${x[2]}">${x[1]}</div></div>`).join("")}
 function renderAgents(){$("agents").innerHTML=state.agents.map(a=>`<button class="agent ${a.agent===selected?"active":""}" onclick="selectAgent('${a.agent}')"><strong>${a.agent}</strong> <span class="pill">${a.status}</span><br><span class="muted">${a.model||""} · ${a.reasoning_effort||""} · hb ${age(a.heartbeat_age_sec)}</span><br><span class="muted">${a.active_task||a.task||"ready"}</span></button>`).join("")}
-async function selectAgent(name){selected=name;renderAgents();await loadDetail(name)}
+async function selectAgent(name){isCreating=false;closeCreateModal();selected=name;renderAgents();await loadDetail(name)}
 async function loadDetail(name){detail=await api(`/api/admin/agents/${encodeURIComponent(name)}?lines=220`);$("detailTitle").textContent=name;$("detailMeta").textContent=`${detail.config.cli||""} · ${detail.config.model||""} · ${detail.status.status||"unknown"}`;$("pane").textContent=detail.pane.text||"(no pane output)";$("tasks").innerHTML=table(detail.tasks,["id","status","title","created_at"]);$("inbox").innerHTML=table(detail.inbox,["local_id","from","priority","task_id","read","content"]);$("radio").innerHTML=table(detail.radio_updates,["task_id","from","local_id","acked","summary"]);$("logs").innerHTML=table(detail.logs,["type","ref","content"]);loadSelectedIntoForm()}
 function table(rows,keys){if(!rows||!rows.length)return'<div class="muted">No rows</div>';return`<table><thead><tr>${keys.map(k=>`<th>${k}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr>${keys.map(k=>`<td>${String(r[k]??"").slice(0,500)}</td>`).join("")}</tr>`).join("")}</tbody></table>`}
 function showTab(name){["pane","tasks","inbox","radio","logs"].forEach(x=>{$(x).classList.toggle("hidden",x!==name);$("tab"+x[0].toUpperCase()+x.slice(1)).classList.toggle("active",x===name)})}
 function loadSelectedIntoForm(){const cfg=detail?detail.config:{};$("fName").value=selected||"";$("fName").disabled=!!selected;$("fCli").value=cfg.cli||"codex-cli";$("fModel").value=cfg.model||"";$("fReasoning").value=cfg.reasoning_effort||"";$("fPlaybook").value=cfg.playbook||"";$("fRole").value=cfg.role||"";$("fSpecialty").value=(cfg.specialty||[]).join(", ");$("fNotes").value=cfg.notes||"";$("fLazy").checked=!!cfg.lazy;$("fRestart").checked=false}
 function payload(){return{name:$("fName").value,cli:$("fCli").value,model:$("fModel").value,reasoning_effort:$("fReasoning").value,playbook:$("fPlaybook").value,role:$("fRole").value,specialty:$("fSpecialty").value,notes:$("fNotes").value,lazy:$("fLazy").checked,restart:$("fRestart").checked}}
-function newAgent(){selected="";detail={config:{}};renderAgents();$("detailTitle").textContent="New agent";$("detailMeta").textContent="";loadSelectedIntoForm()}
+function createPayload(){return{name:$("cName").value,cli:$("cCli").value,model:$("cModel").value,reasoning_effort:$("cReasoning").value,playbook:$("cPlaybook").value,role:$("cRole").value,specialty:$("cSpecialty").value,notes:$("cNotes").value,lazy:$("cLazy").checked}}
+function resetCreateForm(){$("cName").value="";$("cCli").value="codex-cli";$("cModel").value="";$("cReasoning").value="";$("cPlaybook").value="";$("cRole").value="";$("cSpecialty").value="";$("cNotes").value="";$("cLazy").checked=false;$("createMsg").textContent=""}
+function openCreateModal(){$("createModal").classList.add("open")}
+function closeCreateModal(){$("createModal").classList.remove("open")}
+function newAgent(){isCreating=true;resetCreateForm();openCreateModal()}
 async function saveAgent(){try{const body=JSON.stringify(payload()),path=selected?`/api/admin/agents/${encodeURIComponent(selected)}`:"/api/admin/agents",method=selected?"PUT":"POST";const res=await api(path,{method,headers:{"Content-Type":"application/json"},body});$("formMsg").textContent=(res.action&&res.action.stderr)||"saved";selected=res.agent;await loadAll()}catch(e){$("formMsg").textContent=e.message}}
+async function saveNewAgent(){try{const body=JSON.stringify(createPayload());const res=await api("/api/admin/agents",{method:"POST",headers:{"Content-Type":"application/json"},body});if(!res.ok){$("createMsg").textContent=(res.action&&res.action.stderr)||"create failed";return}selected=res.agent;isCreating=false;closeCreateModal();$("createMsg").textContent="";await loadAll()}catch(e){$("createMsg").textContent=e.message}}
 async function restartAgent(){if(!selected)return;await api(`/api/admin/agents/${encodeURIComponent(selected)}/action`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"restart"})});await loadAll()}
 async function deleteAgent(){if(!selected||!confirm(`Delete ${selected}?`))return;await api(`/api/admin/agents/${encodeURIComponent(selected)}`,{method:"DELETE"});selected="";await loadAll()}
-loadAll().catch(e=>{$("stamp").textContent=e.message});setInterval(()=>{if(selected)loadDetail(selected).catch(()=>{});loadAll().catch(()=>{})},5000);
+loadAll().catch(e=>{$("stamp").textContent=e.message});setInterval(()=>{if(!isCreating&&selected)loadDetail(selected).catch(()=>{});loadAll().catch(()=>{})},5000);
 </script></body></html>"""
 
 

@@ -1,0 +1,19 @@
+services:
+  admin:
+    build: .
+    image: ai-company-admin:local
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /root/AI--compony:/ai-company
+      - /root/AI--compony/team-data:/data/team-data
+      - /root/AI--compony/team-data/state:/data/state
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      AI_COMPANY_ROOT: /ai-company
+      AI_COMPANY_STATE_DIR: /data/state
+      AI_COMPANY_CONFIG: /data/team-data/claudeteam.toml
+      AI_COMPANY_ADMIN_HOST: 0.0.0.0
+      AI_COMPANY_ADMIN_PORT: "8766"
+      # Optional. If empty, the admin service auto-detects the running container.
+      AI_COMPANY_CONTAINER: ""

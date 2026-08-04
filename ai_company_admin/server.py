@@ -39,6 +39,10 @@ def compose_file() -> Path:
     return env_path("AI_COMPANY_COMPOSE", str(root_dir() / "deploy" / "server" / "compose.yaml"))
 
 
+def docker_bin() -> str:
+    return os.environ.get("AI_COMPANY_DOCKER_BIN", "/usr/bin/docker").strip() or "/usr/bin/docker"
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -257,8 +261,8 @@ def detect_container() -> str:
     if explicit:
         return explicit
     candidates = [
-        ["docker", "ps", "--filter", "name=claudeteam", "--format", "{{.Names}}"],
-        ["docker", "ps", "--filter", "ancestor=ai-company:local", "--format", "{{.Names}}"],
+        [docker_bin(), "ps", "--filter", "name=claudeteam", "--format", "{{.Names}}"],
+        [docker_bin(), "ps", "--filter", "ancestor=ai-company:local", "--format", "{{.Names}}"],
     ]
     for cmd in candidates:
         proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
@@ -272,7 +276,7 @@ def docker_exec(args: list[str], *, timeout: int = 20) -> dict[str, Any]:
     container = detect_container()
     if not container:
         return {"ok": False, "rc": 127, "stdout": "", "stderr": "claudeteam container not found"}
-    proc = subprocess.run(["docker", "exec", container, *args], text=True,
+    proc = subprocess.run([docker_bin(), "exec", container, *args], text=True,
                           capture_output=True, timeout=timeout, check=False)
     return {"ok": proc.returncode == 0, "rc": proc.returncode,
             "stdout": proc.stdout[-8000:], "stderr": proc.stderr[-4000:],

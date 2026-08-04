@@ -94,6 +94,6 @@ curl -fsS http://127.0.0.1:8766/api/admin/state | head -c 1000
 
 - 读取主项目 state/config 文件
 - 修改 `claudeteam.toml` 中的 agent 配置
-- 通过 Docker socket 进入运行中的 `claudeteam` 容器执行 `claudeteam hire/fire/restart`
+- 通过宿主机挂载进容器的 `/usr/bin/docker` 和 Docker socket，进入运行中的 `claudeteam` 容器执行 `claudeteam hire/fire/restart`
 
 因此二者需要分别更新、分别部署。

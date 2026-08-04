@@ -43,6 +43,13 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def read_json(path: Path, default: Any) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -227,7 +234,7 @@ def list_tasks(agent: str = "") -> list[dict]:
     rows = list(read_json(state_dir() / "tasks.json", {"tasks": []}).get("tasks", []))
     if agent:
         rows = [r for r in rows if r.get("assignee") == agent]
-    rows.sort(key=lambda r: int(str(r.get("id", "T-0")).split("-")[-1]) if "-" in str(r.get("id", "")) else 0)
+    rows.sort(key=lambda r: safe_int(str(r.get("id", "T-0")).split("-")[-1], 0))
     return rows
 
 
@@ -297,7 +304,7 @@ def state() -> dict[str, Any]:
     for name, cfg in (team.get("agents") or {}).items():
         unread = [m for m in inbox if m.get("to") == name and not m.get("read")]
         active = [t for t in tasks if t.get("assignee") == name and t.get("status") in {"进行中", "需审批", "后台中"}]
-        last = hb.get(name)
+        last = safe_int(hb.get(name), 0)
         agents.append({
             "agent": name,
             "config": cfg,
@@ -307,7 +314,7 @@ def state() -> dict[str, Any]:
             "reasoning_effort": cfg.get("reasoning_effort", ""),
             "unread_count": len(unread),
             "active_task": active[0].get("id") if active else "",
-            "heartbeat_age_sec": int((now_ms() - last) / 1000) if last else None,
+            "heartbeat_age_sec": int((now_ms() - last) / 1000) if last > 0 else None,
         })
     q = {
         "pending": sum(1 for t in tasks if t.get("status") == "待处理"),

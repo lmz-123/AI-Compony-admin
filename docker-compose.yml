@@ -1,6 +1,9 @@
 services:
   admin:
-    build: .
+    build:
+      context: .
+      args:
+        DOCKER_IMAGE_PREFIX: ${DOCKER_IMAGE_PREFIX:-}
     image: ai-company-admin:local
     restart: unless-stopped
     network_mode: host

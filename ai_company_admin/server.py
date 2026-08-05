@@ -364,14 +364,26 @@ def create_agent(payload: dict[str, Any]) -> dict[str, Any]:
     if name in (team.get("agents") or {}):
         raise ValueError(f"agent already exists: {name}")
     cfg = config_from_payload(payload)
-    save_agent_config(name, cfg)
+    # Prefer the runtime's native bring-back path first. If the agent was
+    # previously fired, `claudeteam hire <agent>` restores the archived
+    # roster block + workspace via the exact fire → archive → hire flow.
+    # Only fall back to "save config then hire" when the runtime explicitly
+    # reports "not in roster, no archive to restore" (brand-new agent).
     action = claudeteam_cmd(["hire", name])
+    config_saved = False
+    stdout = str(action.get("stdout") or "")
+    stderr = str(action.get("stderr") or "")
+    combined = f"{stdout}\n{stderr}"
+    if not action.get("ok") and "not in roster, no archive to restore" in combined:
+        save_agent_config(name, cfg)
+        config_saved = True
+        action = claudeteam_cmd(["hire", name])
     return {
         "ok": bool(action.get("ok")),
         "agent": name,
         "config": cfg,
         "action": action,
-        "config_saved": True,
+        "config_saved": config_saved,
     }
 
 

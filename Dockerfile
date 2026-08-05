@@ -1,5 +1,4 @@
-ARG DOCKER_IMAGE_PREFIX=
-FROM ${DOCKER_IMAGE_PREFIX}python:3.12-slim
+FROM python:3.12-slim
 
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' /etc/apt/sources.list.d/debian.sources; \
